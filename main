@@ -1,6 +1,7 @@
 # ============================================================
-# KRANZAYY | METRO SHOP BOT — ФИНАЛЬНАЯ ВЕРСИЯ v15
-# 4 человека в заказе (покупатель + 3), описание всегда видно
+# KRANZAYY | METRO SHOP BOT — ФИНАЛЬНАЯ ВЕРСИЯ v16
+# QR запрашивается у АДМИНА, а не у покупателя
+# Только премиум-эмодзи
 # ============================================================
 
 import requests
@@ -46,7 +47,7 @@ RECONNECT_MAX = 300
 MAX_PARTICIPANTS = 4  # покупатель + 3 = 4 всего
 
 # ============================================================
-# ПРЕМИУМ-ЭМОДЗИ
+# ПРЕМИУМ-ЭМОДЗИ (ТОЛЬКО ОНИ)
 # ============================================================
 E_MENU      = "5231235536206730707"
 E_SHOP      = "5278702045883292456"
@@ -84,6 +85,7 @@ orders = {}
 orders_counter = [0]
 group_messages = {}
 review_pending = {}
+awaiting_qr_from_admin = {}  # {order_id: True} — ожидаем QR от админа
 
 # ============================================================
 # ФУНКЦИЯ ПРЕМИУМ-ЭМОДЗИ
@@ -257,7 +259,7 @@ LOOT_TEXT = (
 )
 
 # ============================================================
-# ОПИСАНИЯ СОПРОВОЖДЕНИЙ (без эмодзи, чистый текст)
+# ОПИСАНИЯ СОПРОВОЖДЕНИЙ (ЧИСТЫЙ ТЕКСТ, БЕЗ ЭМОДЗИ)
 # ============================================================
 
 SUPPORT_DESCRIPTIONS = {
@@ -377,22 +379,6 @@ SUPPORT_DESCRIPTIONS = {
     ),
 }
 
-# Короткие описания для группы (без длинных блоков)
-SUPPORT_SHORT_DESC = {
-    "default": "ДЕФОЛТ СОПРОВОЖДЕНИЕ — гарант 10кк, карта 7-ая, вещей 5",
-    "vip": "ВИП СОПРОВОЖДЕНИЕ — гарант 15кк, карта 7-ая, вещей 7",
-    "elite": "ЭЛИТ СОПРОВОЖДЕНИЕ — 7 карта, 21кк, вещей 15",
-    "oligarch": "ОЛИГАРХ СОПРОВОЖДЕНИЕ — гарант 35кк, карта 7-ая, вещей 20",
-    "default_plus": "ДЕФОЛТ+ СОПРОВОЖДЕНИЕ — 7 карта, 10кк, вещей 7",
-    "vip_plus": "ВИП+ СОПРОВОЖДЕНИЕ — 7 карта, 15кк, вещей 12",
-    "elite_plus": "ЭЛИТ+ СОПРОВОЖДЕНИЕ — 7 карта, 21кк, вещей 15",
-    "oligarch_plus": "ОЛИГАРХ+ СОПРОВОЖДЕНИЕ — 7 карта, 35кк, вещей 20",
-    "default_pro": "ДЕФОЛТ ПРО СОПРОВОЖДЕНИЕ — гаранты 10/4/10",
-    "vip_pro": "ВИП ПРО СОПРОВОЖДЕНИЕ — гаранты 15/6/15",
-    "elite_pro": "ЭЛИТ ПРО СОПРОВОЖДЕНИЕ — гаранты 21/8/21",
-    "oligarch_pro": "ОЛИГАРХ ПРО СОПРОВОЖДЕНИЕ — гаранты 30/12/35",
-}
-
 SUPPORT_BUTTONS = [
     ("default",       "10кк | Дефолт (7 карта) — 100₽",  "success", E_CHECK),
     ("vip",           "15кк | Вип (7 карта) — 150₽",      "success", E_CHECK),
@@ -481,18 +467,24 @@ def owner_done_menu(pid):
         [{"text": "Заказ выполнен — Нет", "callback_data": f"done_no_{pid}", "style": "danger", "icon_custom_emoji_id": E_CROSS}],
     ]}
 
+def owner_send_qr_menu(pid):
+    """Кнопка для админа — отправить QR"""
+    return {"inline_keyboard": [
+        [{"text": "Отправить QR-код", "callback_data": f"send_qr_{pid}", "style": "success", "icon_custom_emoji_id": E_INFO}],
+        [{"text": "Заказ выполнен — Да", "callback_data": f"done_yes_{pid}", "style": "success", "icon_custom_emoji_id": E_CHECK}],
+        [{"text": "Заказ выполнен — Нет", "callback_data": f"done_no_{pid}", "style": "danger", "icon_custom_emoji_id": E_CROSS}],
+    ]}
+
 def group_join_menu(pid):
     return {"inline_keyboard": [
         [{"text": "Я участвую в сопровождении", "callback_data": f"join_{pid}", "style": "success", "icon_custom_emoji_id": E_USER}]
     ]}
 
 # ============================================================
-# ФУНКЦИЯ ФОРМИРОВАНИЯ ТЕКСТА ЗАКАЗА В ГРУППЕ
-# (всегда с описанием)
+# ФОРМИРОВАНИЕ ТЕКСТА ЗАКАЗА В ГРУППЕ
 # ============================================================
 
 def build_group_text(pid):
-    """Собирает полный текст заказа в группу: с описанием и участниками"""
     o = orders.get(pid, {})
     gm = group_messages.get(pid, {})
     parts = gm.get("parts", [])
@@ -502,7 +494,6 @@ def build_group_text(pid):
     item = o.get("item_name", "—")
     price = o.get("price", "—")
     
-    # Описание (полное, с деталями)
     desc = SUPPORT_DESCRIPTIONS.get(o.get("item_key"), "") if o.get("type") == "support" else ""
     
     text = (
@@ -597,6 +588,7 @@ def process_paid(chat_id, cb_id, pid):
     send_replacing(chat_id, f'{em(E_TIME, "⏳")} Ожидайте подтверждения...')
 
 def owner_confirm(cb_id, pid, yes):
+    """Админ подтвердил оплату"""
     o = orders.get(pid)
     if not o:
         answer_callback(cb_id, f'{em(E_CROSS, "❌")} Не найден', True)
@@ -606,11 +598,20 @@ def owner_confirm(cb_id, pid, yes):
         logger.info(f'✅ {pid}: админ подтвердил')
         
         if o["type"] == "boost":
+            # БУСТ: покупателю — ожидайте QR, а админу — запрос прислать QR
             send_safe(o["user_id"],
                 f'{em(E_CHECK, "✅")} <b>Оплата подтверждена!</b>\n\n'
                 f'{em(E_INFO, "ℹ️")} Ожидайте QR-код от админа. Зайдите в игру и вставьте его.\n\n'
                 f'{em(E_TIME, "⏳")} Максимум 20 минут.')
+            # Запрос админу прислать QR
+            awaiting_qr_from_admin[pid] = True
+            send_safe(OWNER_ID,
+                f'{em(E_INFO, "ℹ️")} <b>Отправьте QR-код</b> для заказа {pid}\n\n'
+                f'{em(E_USER, "👤")} Покупатель: @{o["username"]}\n'
+                f'{em(E_BOX, "📦")} {o["item_name"]}',
+                owner_send_qr_menu(pid))
         else:
+            # СОПРОВОЖДЕНИЕ: покупателю — введите PUBG ID
             send_safe(o["user_id"],
                 f'{em(E_CHECK, "✅")} <b>Заказ оплачен!</b>\n\n'
                 f'{em(E_USER, "🆔")} Введите ваш PUBG ID (только цифры, до 25):')
@@ -623,6 +624,7 @@ def owner_confirm(cb_id, pid, yes):
         answer_callback(cb_id, f'{em(E_CROSS, "❌")} Отменено')
 
 def process_pubg_id(chat_id, pid_text):
+    """Покупатель ввёл PUBG ID (для сопровождений)"""
     uid = str(chat_id)
     o = None
     key = None
@@ -639,10 +641,7 @@ def process_pubg_id(chat_id, pid_text):
     uname = o.get("username", "user")
     logger.info(f'🆔 {key}: PUBG {pid_text}')
     
-    # Инициализируем участников — покупатель уже первый
     group_messages[key] = {"message_id": None, "parts": [f"@{uname}"]}
-    
-    # Собираем полный текст с описанием
     text = build_group_text(key)
     r = send_safe(GROUP_ID, text, group_join_menu(key))
     if r.get("ok"):
@@ -665,7 +664,6 @@ def process_join(chat_id, cb_id, pid):
     if uname in gm["parts"]:
         answer_callback(cb_id, f'{em(E_TIME, "⚠️")} Уже участвуете', True)
         return
-    # максимум 4 человека ВСЕГО (покупатель + 3)
     if len(gm["parts"]) >= MAX_PARTICIPANTS:
         answer_callback(cb_id, f'{em(E_CROSS, "❌")} Мест нет (макс {MAX_PARTICIPANTS})', True)
         return
@@ -673,26 +671,47 @@ def process_join(chat_id, cb_id, pid):
     gm["parts"].append(uname)
     answer_callback(cb_id, f'{em(E_CHECK, "✅")} ({len(gm["parts"])}/{MAX_PARTICIPANTS})')
     
-    # Полный текст заново (с описанием)
     nt = build_group_text(pid)
     markup = None if len(gm["parts"]) >= MAX_PARTICIPANTS else group_join_menu(pid)
     edit_safe(GROUP_ID, gm["message_id"], nt, markup)
 
-def owner_send_qr(file_id, caption=""):
-    cnt = 0
-    for pid, o in list(orders.items()):
-        if o.get("status") in ("in_group", "awaiting_info", "awaiting_qr"):
-            send_photo_safe(o["user_id"], file_id,
-                caption=(
-                    f'{em(E_INFO, "ℹ️")} <b>Ваш QR-код!</b>\n\n'
-                    f'{em(E_TIME, "⏳")} 5 минут чтобы использовать, иначе заново.\n\n'
-                    + (caption or "")
-                ))
-            o["status"] = "awaiting_done"
-            send_safe(OWNER_ID, f'{em(E_CHECK, "✅")} QR → {pid}', owner_done_menu(pid))
-            cnt += 1
-    if cnt == 0:
-        send_safe(OWNER_ID, f'{em(E_CROSS, "⚠️")} Нет заказов для QR')
+# ============================================================
+# ОТПРАВКА QR АДМИНОМ
+# ============================================================
+
+def admin_send_qr_to_buyer(pid, file_id, caption=""):
+    """Админ прислал QR — пересылаем покупателю"""
+    o = orders.get(pid)
+    if not o:
+        send_safe(OWNER_ID, f'{em(E_CROSS, "❌")} Заказ не найден')
+        return False
+    
+    send_photo_safe(o["user_id"], file_id,
+        caption=(
+            f'{em(E_INFO, "ℹ️")} <b>Ваш QR-код!</b>\n\n'
+            f'{em(E_TIME, "⏳")} 5 минут чтобы использовать, иначе заново.\n\n'
+            + (caption or "")
+        ))
+    o["status"] = "awaiting_done"
+    awaiting_qr_from_admin.pop(pid, None)
+    logger.info(f'✅ QR отправлен покупателю {o["user_id"]}')
+    send_safe(OWNER_ID, f'{em(E_CHECK, "✅")} QR отправлен покупателю', owner_done_menu(pid))
+    return True
+
+def process_owner_photo(chat_id, file_id, caption=""):
+    """Админ прислал фото — отправляем тому, кто ждёт"""
+    if not awaiting_qr_from_admin:
+        send_safe(OWNER_ID, f'{em(E_CROSS, "⚠️")} Нет активных заказов для QR')
+        return
+    
+    # Отправляем первому ожидающему (или всем — по заказу)
+    for pid in list(awaiting_qr_from_admin.keys()):
+        admin_send_qr_to_buyer(pid, file_id, caption)
+        break
+
+# ============================================================
+# ОТЗЫВЫ
+# ============================================================
 
 def owner_done(cb_id, pid, yes):
     o = orders.get(pid)
@@ -711,7 +730,11 @@ def owner_done(cb_id, pid, yes):
         send_safe(OWNER_ID, f'{em(E_CHECK, "✅")} Заказ {pid} закрыт')
     else:
         o["status"] = "awaiting_qr"
+        awaiting_qr_from_admin[pid] = True
         send_safe(o["user_id"], f'{em(E_INFO, "ℹ️")} Админ пришлёт новый QR.')
+        send_safe(OWNER_ID,
+            f'{em(E_INFO, "ℹ️")} Отправьте новый QR для заказа {pid}',
+            owner_send_qr_menu(pid))
         answer_callback(cb_id, f'{em(E_TIME, "⚠️")} Ждём QR')
 
 def process_review(chat_id, text):
@@ -750,8 +773,21 @@ def handle_update(u):
             text = m.get("text", "")
             photo = m.get("photo")
             
+            # Фото от АДМИНА → отправляем покупателю (QR)
             if photo and chat_id == OWNER_ID:
-                owner_send_qr(photo[-1]["file_id"], m.get("caption", ""))
+                file_id = photo[-1]["file_id"]
+                # Проверяем, ждём ли мы QR от админа
+                if awaiting_qr_from_admin:
+                    process_owner_photo(chat_id, file_id, m.get("caption", ""))
+                else:
+                    # Если никто не ждёт — отправляем всем in_group
+                    cnt = 0
+                    for pid, o in list(orders.items()):
+                        if o.get("status") in ("in_group", "awaiting_info"):
+                            admin_send_qr_to_buyer(pid, file_id, m.get("caption", ""))
+                            cnt += 1
+                    if cnt == 0:
+                        send_safe(OWNER_ID, f'{em(E_CROSS, "⚠️")} Нет заказов для QR')
                 return
             
             if text == "/start":
@@ -832,6 +868,16 @@ def handle_update(u):
                         return
                 return
             
+            # Кнопка "Отправить QR-код" от админа
+            if data.startswith("send_qr_"):
+                pid = data.replace("send_qr_", "")
+                awaiting_qr_from_admin[pid] = True
+                answer_callback(cb_id, f'{em(E_INFO, "ℹ️")} Отправьте фото QR в этот чат')
+                send_safe(OWNER_ID,
+                    f'{em(E_INFO, "ℹ️")} Пришлите фото QR-кода для заказа {pid}\n'
+                    f'Просто отправьте фото в этот чат.')
+                return
+            
             if data.startswith("paid_"):
                 process_paid(chat_id, cb_id, data.replace("paid_", ""))
                 return
@@ -880,8 +926,7 @@ def notify_startup(bot_username):
             f'{em(E_DIAMOND, "📊")} Режим: поллинг\n'
             f'{em(E_USER, "👥")} Группа: <code>{GROUP_ID}</code>\n'
             f'{em(E_USER, "⭐")} Канал отзывов: <code>{REVIEWS_CHANNEL}</code>\n'
-            f'{em(E_USER, "👤")} Владелец: <code>{OWNER_ID}</code>\n'
-            f'{em(E_USER, "👥")} Макс участников: {MAX_PARTICIPANTS}\n\n'
+            f'{em(E_USER, "👤")} Владелец: <code>{OWNER_ID}</code>\n\n'
             f'<b>Готов принимать заказы!</b>'
         )
         r = send_safe(OWNER_ID, text)
