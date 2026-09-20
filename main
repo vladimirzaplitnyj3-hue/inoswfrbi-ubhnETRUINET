@@ -1,5 +1,6 @@
 # ============================================================
-# KRANZAYY | METRO SHOP BOT — ФИНАЛЬНАЯ ВЕРСИЯ v12
+# KRANZAYY | METRO SHOP BOT — ФИНАЛЬНАЯ ВЕРСИЯ v13
+# ТОЛЬКО ПРЕМИУМ-ЭМОДЗИ (НИ ОДНОГО ОБЫЧНОГО)
 # ============================================================
 
 import requests
@@ -43,7 +44,7 @@ RECONNECT_MIN = 5
 RECONNECT_MAX = 300
 
 # ============================================================
-# ПРЕМИУМ-ЭМОДЗИ (все ID)
+# ПРЕМИУМ-ЭМОДЗИ (ТОЛЬКО ОНИ)
 # ============================================================
 E_MENU      = "5231235536206730707"
 E_SHOP      = "5278702045883292456"
@@ -83,12 +84,13 @@ user_data = {}
 orders = {}
 orders_counter = [0]
 group_messages = {}
-review_pending = {}   # {user_id: True} — ожидание отзыва
+review_pending = {}
 
 # ============================================================
 # ФУНКЦИЯ ПРЕМИУМ-ЭМОДЗИ
 # ============================================================
 def em(eid, fallback="⭐"):
+    """Возвращает премиум-эмодзи. Обычных эмодзи не должно быть нигде."""
     return f'<tg-emoji emoji-id="{eid}">{fallback}</tg-emoji>'
 
 def stars_row():
@@ -229,7 +231,7 @@ def clear_last_message(user_id):
         user_data[uid]["last_msg_id"] = None
 
 # ============================================================
-# ТЕКСТЫ
+# ТЕКСТЫ (ТОЛЬКО ПРЕМИУМ-ЭМОДЗИ)
 # ============================================================
 
 MAIN_CAPTION = (
@@ -258,6 +260,10 @@ LOOT_TEXT = (
     f'{em(E_CHECK, "✅")} 2-3 неделя — 1 шестая шмотка — 3{em(E_RUB, "₽")}\n\n'
     f'{em(E_INFO, "ℹ️")} Если хотите купить — @Manager_Kranzayy'
 )
+
+# ============================================================
+# СОПРОВОЖДЕНИЯ (ВСЁ ЧЕРЕЗ ПРЕМИУМ-ЭМОДЗИ)
+# ============================================================
 
 SUPPORT_DESCRIPTIONS = {
     "default": (
@@ -567,7 +573,6 @@ def owner_confirm(cb_id, pid, yes):
         answer_callback(cb_id, f'{em(E_CROSS, "❌")} Отменено')
 
 def process_pubg_id(chat_id, pid_text):
-    """Пользователь ввёл PUBG ID — отправляем в группу"""
     uid = str(chat_id)
     o = None
     key = None
@@ -636,7 +641,6 @@ def process_join(chat_id, cb_id, pid):
     edit_safe(GROUP_ID, gm["message_id"], nt, markup)
 
 def owner_send_qr(file_id, caption=""):
-    """Владелец прислал фото — рассылаем тем, кто ждёт QR"""
     cnt = 0
     for pid, o in list(orders.items()):
         if o.get("status") in ("in_group", "awaiting_info", "awaiting_qr"):
@@ -673,7 +677,6 @@ def owner_done(cb_id, pid, yes):
         answer_callback(cb_id, f'{em(E_TIME, "⚠️")} Ждём QR')
 
 def process_review(chat_id, text):
-    """Отправляем отзыв в канал"""
     uid = str(chat_id)
     if uid not in review_pending:
         return False
@@ -690,11 +693,11 @@ def process_review(chat_id, text):
     
     r = send_safe(REVIEWS_CHANNEL, review_text)
     if r.get("ok"):
-        logger.info(f'✅ Отзыв от {uname} отправлен в канал {REVIEWS_CHANNEL}')
+        logger.info(f'✅ Отзыв от {uname} отправлен')
         send_safe(chat_id, f'{em(E_CHECK, "✅")} Спасибо за отзыв!')
     else:
-        logger.error(f'❌ Не удалось отправить отзыв: {r}')
-        send_safe(chat_id, f'{em(E_CROSS, "❌")} Ошибка отправки отзыва.')
+        logger.error(f'❌ Не удалось: {r}')
+        send_safe(chat_id, f'{em(E_CROSS, "❌")} Ошибка отправки.')
     return True
 
 # ============================================================
@@ -709,7 +712,6 @@ def handle_update(u):
             text = m.get("text", "")
             photo = m.get("photo")
             
-            # Фото от админа = QR
             if photo and chat_id == OWNER_ID:
                 owner_send_qr(photo[-1]["file_id"], m.get("caption", ""))
                 return
@@ -719,13 +721,11 @@ def handle_update(u):
                 send_main_menu(chat_id)
                 return
             
-            # Проверка на отзыв
             uid = str(chat_id)
             if uid in review_pending and text and not text.startswith("/"):
                 process_review(chat_id, text)
                 return
             
-            # PUBG ID
             if text and text.isdigit() and len(text) <= 25:
                 if process_pubg_id(chat_id, text):
                     return
@@ -829,7 +829,7 @@ def handle_update(u):
         logger.error(traceback.format_exc())
 
 # ============================================================
-# УВЕДОМЛЕНИЕ О ЗАПУСКЕ
+# УВЕДОМЛЕНИЕ
 # ============================================================
 
 def notify_startup(bot_username):
@@ -855,7 +855,7 @@ def notify_startup(bot_username):
         return False
 
 # ============================================================
-# ГЛАВНЫЙ ЗАПУСК
+# ЗАПУСК
 # ============================================================
 
 def main():
@@ -867,7 +867,7 @@ def main():
         logger.warning("⚠️ Нет доступа к api.telegram.org — ждём...")
         while not check_internet():
             time.sleep(10)
-            logger.info("🔄 Повторная проверка...")
+            logger.info("🔄 Проверка...")
     logger.info("✅ Интернет доступен")
     
     me = api_request("getMe", {})
