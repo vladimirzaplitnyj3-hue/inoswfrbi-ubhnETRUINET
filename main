@@ -1,6 +1,6 @@
 # ============================================================
-# KRANZAYY | METRO SHOP BOT — ФИНАЛЬНАЯ ВЕРСИЯ v13
-# ТОЛЬКО ПРЕМИУМ-ЭМОДЗИ (НИ ОДНОГО ОБЫЧНОГО)
+# KRANZAYY | METRO SHOP BOT — ФИНАЛЬНАЯ ВЕРСИЯ v15
+# 4 человека в заказе (покупатель + 3), описание всегда видно
 # ============================================================
 
 import requests
@@ -43,8 +43,10 @@ PAY_CARD = "2202208555983213"
 RECONNECT_MIN = 5
 RECONNECT_MAX = 300
 
+MAX_PARTICIPANTS = 4  # покупатель + 3 = 4 всего
+
 # ============================================================
-# ПРЕМИУМ-ЭМОДЗИ (ТОЛЬКО ОНИ)
+# ПРЕМИУМ-ЭМОДЗИ
 # ============================================================
 E_MENU      = "5231235536206730707"
 E_SHOP      = "5278702045883292456"
@@ -60,14 +62,11 @@ E_USER      = "5316970857325687050"
 E_MONEY     = "5219714093161671306"
 E_RUB       = "5219983482100412686"
 E_PRICE     = "5219919637411556483"
-E_DASH      = "5260432436122113337"
 E_HEART     = "5346301287774323405"
 E_DIAMOND   = "5465556444931718975"
-E_CHOICE    = "5366496876835148060"
 E_BAG       = "5431406343917414987"
 E_BOX       = "5429424809215797643"
 
-# Кнопки меню
 BTN_SUPPORT = "5269762028506989874"
 BTN_KITS    = "5429424809215797643"
 BTN_LOOT    = "5431406343917414987"
@@ -90,7 +89,6 @@ review_pending = {}
 # ФУНКЦИЯ ПРЕМИУМ-ЭМОДЗИ
 # ============================================================
 def em(eid, fallback="⭐"):
-    """Возвращает премиум-эмодзи. Обычных эмодзи не должно быть нигде."""
     return f'<tg-emoji emoji-id="{eid}">{fallback}</tg-emoji>'
 
 def stars_row():
@@ -98,9 +96,6 @@ def stars_row():
 
 def arrows_row(n=6):
     return em(E_ARROW, "➡️") * n
-
-def line_diamond():
-    return f'{em(E_DIAMOND, "💎")}{em(E_DIAMOND, "💎")}{em(E_DIAMOND, "💎")}{em(E_DIAMOND, "💎")}'
 
 # ============================================================
 # УТИЛИТЫ
@@ -231,7 +226,7 @@ def clear_last_message(user_id):
         user_data[uid]["last_msg_id"] = None
 
 # ============================================================
-# ТЕКСТЫ (ТОЛЬКО ПРЕМИУМ-ЭМОДЗИ)
+# ТЕКСТЫ
 # ============================================================
 
 MAIN_CAPTION = (
@@ -244,157 +239,173 @@ MAIN_CAPTION = (
 
 KITS_TEXT = (
     f'{em(E_BOX, "📦")} <b>КОМПЛЕКТЫ</b>\n\n'
-    f'{em(E_CHECK, "✅")} 1 день — 1 шестая шмотка — 7{em(E_RUB, "₽")}\n'
-    f'{em(E_CHECK, "✅")} 2 день — 1 шестая шмотка — 5{em(E_RUB, "₽")}\n'
-    f'{em(E_CHECK, "✅")} 3-7 день — 1 шестая шмотка — 4{em(E_RUB, "₽")}\n'
-    f'{em(E_CHECK, "✅")} 2-3 неделя — 1 шестая шмотка — 3{em(E_RUB, "₽")}\n\n'
-    f'{em(E_INFO, "ℹ️")} В шестую шмотку входит:\n'
-    f'{em(E_USER, "👤")} хотите купить — @Manager_Kranzayy'
+    f'1 день — 1 шестая шмотка — 7₽\n'
+    f'2 день — 1 шестая шмотка — 5₽\n'
+    f'3-7 день — 1 шестая шмотка — 4₽\n'
+    f'2-3 неделя — 1 шестая шмотка — 3₽\n\n'
+    f'В шестую шмотку входит:\n'
+    f'хотите купить — @Manager_Kranzayy'
 )
 
 LOOT_TEXT = (
     f'{em(E_BAG, "🎒")} <b>СКУПКА ЛУТА</b>\n\n'
-    f'{em(E_CHECK, "✅")} 1 день — 1 шестая шмотка — 7{em(E_RUB, "₽")}\n'
-    f'{em(E_CHECK, "✅")} 2 день — 1 шестая шмотка — 5{em(E_RUB, "₽")}\n'
-    f'{em(E_CHECK, "✅")} 3-7 день — 1 шестая шмотка — 4{em(E_RUB, "₽")}\n'
-    f'{em(E_CHECK, "✅")} 2-3 неделя — 1 шестая шмотка — 3{em(E_RUB, "₽")}\n\n'
-    f'{em(E_INFO, "ℹ️")} Если хотите купить — @Manager_Kranzayy'
+    f'1 день — 1 шестая шмотка — 7₽\n'
+    f'2 день — 1 шестая шмотка — 5₽\n'
+    f'3-7 день — 1 шестая шмотка — 4₽\n'
+    f'2-3 неделя — 1 шестая шмотка — 3₽\n\n'
+    f'Если хотите купить — @Manager_Kranzayy'
 )
 
 # ============================================================
-# СОПРОВОЖДЕНИЯ (ВСЁ ЧЕРЕЗ ПРЕМИУМ-ЭМОДЗИ)
+# ОПИСАНИЯ СОПРОВОЖДЕНИЙ (без эмодзи, чистый текст)
 # ============================================================
 
 SUPPORT_DESCRIPTIONS = {
     "default": (
-        f'{em(E_DIAMOND, "💎")} <b>СОПРОВОЖДЕНИЕ</b>\n\n'
-        f'{em(E_CHECK, "✅")} гарант: 10.000.000\n\n'
-        f'{em(E_CHECK, "✅")} Вещи с типов ваши\n\n'
-        f'{em(E_CHECK, "✅")} карта: 7-ая\n\n'
-        f'{em(E_CHECK, "✅")} гарант вещей: 5\n\n'
-        f'{em(E_BOX, "📦")} Выдача: ф6 сета с мк ВК\n\n'
-        f'{em(E_INFO, "ℹ️")} Если с вас снимают, не возвращаем {em(E_CROSS, "❌")}\n\n'
-        f'{em(E_PRICE, "💵")} цена {em(E_DASH, "➖")} 100{em(E_RUB, "₽")}'
+        "<b>СОПРОВОЖДЕНИЕ</b>\n\n"
+        "гарант: 10.000.000\n\n"
+        "Вещи с типов ваши\n\n"
+        "карта: 7-ая\n\n"
+        "гарант вещей: 5\n\n"
+        "Выдача: ф6 сета с мк ВК\n\n"
+        "Если с вас снимают, не возвращаем\n\n"
+        "цена — 100₽"
     ),
     "vip": (
-        f'{em(E_DIAMOND, "💎")} <b>СОПРОВОЖДЕНИЕ</b>\n\n'
-        f'{em(E_CHECK, "✅")} гарант: 15.000.000\n\n'
-        f'{em(E_CHECK, "✅")} Вещи с типов ваши\n\n'
-        f'{em(E_CHECK, "✅")} карта: 7-ая\n\n'
-        f'{em(E_CHECK, "✅")} гарант вещей: 7\n\n'
-        f'{em(E_BOX, "📦")} Выдача: ф6 сета с мк ВК\n\n'
-        f'{em(E_INFO, "ℹ️")} Если с вас снимают, не возвращаем {em(E_CROSS, "❌")}\n\n'
-        f'{em(E_PRICE, "💵")} цена {em(E_DASH, "➖")} 150{em(E_RUB, "₽")}'
+        "<b>СОПРОВОЖДЕНИЕ</b>\n\n"
+        "гарант: 15.000.000\n\n"
+        "Вещи с типов ваши\n\n"
+        "карта: 7-ая\n\n"
+        "гарант вещей: 7\n\n"
+        "Выдача: ф6 сета с мк ВК\n\n"
+        "Если с вас снимают, не возвращаем\n\n"
+        "цена — 150₽"
     ),
     "elite": (
-        f'{em(E_DIAMOND, "💎")} <b>СОПРОВОЖДЕНИЕ НА 7 КАРТУ</b>\nНА 21.000.000\n\n'
-        f'{em(E_CHECK, "✅")} в него входит:\n\n'
-        f'{em(E_BOX, "📦")} в начале выдаем ф6 сета с мк ВК\n'
-        f'{em(E_CHECK, "✅")} гарант выноса 21.000.000\n'
-        f'{em(E_CHECK, "✅")} гарант вещей 15 штук\n'
-        f'{em(E_CHECK, "✅")} если снимают, возвращаем {em(E_CHECK, "✅")}\n\n'
-        f'{em(E_PRICE, "💵")} цена {em(E_DASH, "➖")} 290{em(E_RUB, "₽")}'
+        "<b>СОПРОВОЖДЕНИЕ НА 7 КАРТУ</b>\nНА 21.000.000\n\n"
+        "в него входит:\n\n"
+        "в начале выдаем ф6 сета с мк ВК\n"
+        "гарант выноса 21.000.000\n"
+        "гарант вещей 15 штук\n"
+        "если снимают, возвращаем\n\n"
+        "цена — 290₽"
     ),
     "oligarch": (
-        f'{em(E_DIAMOND, "💎")} <b>СОПРОВОЖДЕНИЕ</b>\n\n'
-        f'{em(E_CHECK, "✅")} гарант: 35.000.000\n\n'
-        f'{em(E_CHECK, "✅")} Вещи с типов ваши\n\n'
-        f'{em(E_CHECK, "✅")} карта: 7-ая\n\n'
-        f'{em(E_CHECK, "✅")} гарант вещей: 20\n\n'
-        f'{em(E_BOX, "📦")} Выдача: ф6 сета с мк ВК\n\n'
-        f'{em(E_PRICE, "💵")} цена {em(E_DASH, "➖")} 359{em(E_RUB, "₽")}'
+        "<b>СОПРОВОЖДЕНИЕ</b>\n\n"
+        "гарант: 35.000.000\n\n"
+        "Вещи с типов ваши\n\n"
+        "карта: 7-ая\n\n"
+        "гарант вещей: 20\n\n"
+        "Выдача: ф6 сета с мк ВК\n\n"
+        "цена — 359₽"
     ),
     "default_plus": (
-        f'{em(E_DIAMOND, "💎")} <b>СОПРОВОЖДЕНИЕ НА 7 КАРТУ</b>\nНА 10.000.000\n\n'
-        f'{em(E_CHECK, "✅")} в него входит:\n\n'
-        f'{em(E_BOX, "📦")} в начале выдаем ф6 сета с мк ВК\n'
-        f'{em(E_CHECK, "✅")} гарант выноса 10.000.000\n'
-        f'{em(E_CHECK, "✅")} гарант вещей 7 штук\n'
-        f'{em(E_CHECK, "✅")} если снимают, возвращаем {em(E_CHECK, "✅")}\n\n'
-        f'{em(E_PRICE, "💵")} цена {em(E_DASH, "➖")} 150{em(E_RUB, "₽")}'
+        "<b>СОПРОВОЖДЕНИЕ НА 7 КАРТУ</b>\nНА 10.000.000\n\n"
+        "в него входит:\n\n"
+        "в начале выдаем ф6 сета с мк ВК\n"
+        "гарант выноса 10.000.000\n"
+        "гарант вещей 7 штук\n"
+        "если снимают, возвращаем\n\n"
+        "цена — 150₽"
     ),
     "vip_plus": (
-        f'{em(E_DIAMOND, "💎")} <b>СОПРОВОЖДЕНИЕ НА 7 КАРТУ</b>\nНА 15.000.000\n\n'
-        f'{em(E_CHECK, "✅")} в него входит:\n\n'
-        f'{em(E_BOX, "📦")} в начале выдаем ф6 сета с мк ВК\n'
-        f'{em(E_CHECK, "✅")} гарант выноса 15.000.000\n'
-        f'{em(E_CHECK, "✅")} гарант вещей 12 штук\n'
-        f'{em(E_CHECK, "✅")} если снимают, возвращаем {em(E_CHECK, "✅")}\n\n'
-        f'{em(E_PRICE, "💵")} цена {em(E_DASH, "➖")} 210{em(E_RUB, "₽")}'
+        "<b>СОПРОВОЖДЕНИЕ НА 7 КАРТУ</b>\nНА 15.000.000\n\n"
+        "в него входит:\n\n"
+        "в начале выдаем ф6 сета с мк ВК\n"
+        "гарант выноса 15.000.000\n"
+        "гарант вещей 12 штук\n"
+        "если снимают, возвращаем\n\n"
+        "цена — 210₽"
     ),
     "elite_plus": (
-        f'{em(E_DIAMOND, "💎")} <b>СОПРОВОЖДЕНИЕ НА 7 КАРТУ</b>\nНА 21.000.000\n\n'
-        f'{em(E_CHECK, "✅")} в него входит:\n\n'
-        f'{em(E_BOX, "📦")} в начале выдаем ф6 сета с мк ВК\n'
-        f'{em(E_CHECK, "✅")} гарант выноса 21.000.000\n'
-        f'{em(E_CHECK, "✅")} гарант вещей 15 штук\n'
-        f'{em(E_CHECK, "✅")} если снимают, возвращаем {em(E_CHECK, "✅")}\n\n'
-        f'{em(E_PRICE, "💵")} цена {em(E_DASH, "➖")} 290{em(E_RUB, "₽")}'
+        "<b>СОПРОВОЖДЕНИЕ НА 7 КАРТУ</b>\nНА 21.000.000\n\n"
+        "в него входит:\n\n"
+        "в начале выдаем ф6 сета с мк ВК\n"
+        "гарант выноса 21.000.000\n"
+        "гарант вещей 15 штук\n"
+        "если снимают, возвращаем\n\n"
+        "цена — 290₽"
     ),
     "oligarch_plus": (
-        f'{em(E_DIAMOND, "💎")} <b>СОПРОВОЖДЕНИЕ НА 7 КАРТУ</b>\nНА 35.000.000\n\n'
-        f'{em(E_CHECK, "✅")} в него входит:\n'
-        f'{em(E_BOX, "📦")} в начале выдаем ф6 сета с мк ВК\n'
-        f'{em(E_CHECK, "✅")} гарант выноса 35.000.000\n'
-        f'{em(E_CHECK, "✅")} гарант вещей 20 штук\n'
-        f'{em(E_CHECK, "✅")} Если с вас снимают, возвращаем {em(E_CHECK, "✅")}\n\n'
-        f'{em(E_PRICE, "💵")} цена {em(E_DASH, "➖")} 425{em(E_RUB, "₽")}'
+        "<b>СОПРОВОЖДЕНИЕ НА 7 КАРТУ</b>\nНА 35.000.000\n\n"
+        "в него входит:\n"
+        "в начале выдаем ф6 сета с мк ВК\n"
+        "гарант выноса 35.000.000\n"
+        "гарант вещей 20 штук\n"
+        "Если с вас снимают, возвращаем\n\n"
+        "цена — 425₽"
     ),
     "default_pro": (
-        f'{em(E_DIAMOND, "💎")} <b>ДЕФОЛТ ПРО СОПРОВОЖДЕНИЕ</b>\n\n'
-        f'{em(E_BOX, "📦")} выдаем: ф6 сета с мк ВК\n'
-        f'{em(E_CHECK, "✅")} если снимают, возвращаем {em(E_CHECK, "✅")}\n\n'
-        f'{em(E_DIAMOND, "💎")} <b>ГАРАНТЫ</b>\n\n'
-        f'{em(E_CHECK, "✅")} гарант вещей — 10 шт.\n'
-        f'{em(E_CHECK, "✅")} гарант билетов — 4 шт.\n'
-        f'{em(E_CHECK, "✅")} гарант выноса — 10кк.\n\n'
-        f'{em(E_PRICE, "💵")} цена {em(E_DASH, "➖")} 225{em(E_RUB, "₽")}'
+        "<b>ДЕФОЛТ ПРО СОПРОВОЖДЕНИЕ</b>\n\n"
+        "выдаем: ф6 сета с мк ВК\n"
+        "если снимают, возвращаем\n\n"
+        "ГАРАНТЫ\n\n"
+        "гарант вещей — 10 шт.\n"
+        "гарант билетов — 4 шт.\n"
+        "гарант выноса — 10кк.\n\n"
+        "цена — 225₽"
     ),
     "vip_pro": (
-        f'{em(E_DIAMOND, "💎")} <b>ВИП ПРО СОПРОВОЖДЕНИЕ</b>\n\n'
-        f'{em(E_BOX, "📦")} выдаем: ф6 сета с мк ВК\n'
-        f'{em(E_CHECK, "✅")} если снимают, возвращаем {em(E_CHECK, "✅")}\n\n'
-        f'{em(E_DIAMOND, "💎")} <b>ГАРАНТЫ</b>\n\n'
-        f'{em(E_CHECK, "✅")} гарант вещей — 15 шт.\n'
-        f'{em(E_CHECK, "✅")} гарант билетов — 6 шт.\n'
-        f'{em(E_CHECK, "✅")} гарант выноса — 15кк.\n\n'
-        f'{em(E_PRICE, "💵")} цена {em(E_DASH, "➖")} 289{em(E_RUB, "₽")}'
+        "<b>ВИП ПРО СОПРОВОЖДЕНИЕ</b>\n\n"
+        "выдаем: ф6 сета с мк ВК\n"
+        "если снимают, возвращаем\n\n"
+        "ГАРАНТЫ\n\n"
+        "гарант вещей — 15 шт.\n"
+        "гарант билетов — 6 шт.\n"
+        "гарант выноса — 15кк.\n\n"
+        "цена — 289₽"
     ),
     "elite_pro": (
-        f'{em(E_DIAMOND, "💎")} <b>ЭЛИТ ПРО СОПРОВОЖДЕНИЕ</b>\n\n'
-        f'{em(E_BOX, "📦")} выдаем: ф6 сета с мк ВК\n'
-        f'{em(E_CHECK, "✅")} если снимают, возвращаем {em(E_CHECK, "✅")}\n\n'
-        f'{em(E_DIAMOND, "💎")} <b>ГАРАНТЫ</b>\n\n'
-        f'{em(E_CHECK, "✅")} гарант вещей — 21 шт.\n'
-        f'{em(E_CHECK, "✅")} гарант билетов — 8 шт.\n'
-        f'{em(E_CHECK, "✅")} гарант выноса — 21кк.\n\n'
-        f'{em(E_PRICE, "💵")} цена {em(E_DASH, "➖")} 369{em(E_RUB, "₽")}'
+        "<b>ЭЛИТ ПРО СОПРОВОЖДЕНИЕ</b>\n\n"
+        "выдаем: ф6 сета с мк ВК\n"
+        "если снимают, возвращаем\n\n"
+        "ГАРАНТЫ\n\n"
+        "гарант вещей — 21 шт.\n"
+        "гарант билетов — 8 шт.\n"
+        "гарант выноса — 21кк.\n\n"
+        "цена — 369₽"
     ),
     "oligarch_pro": (
-        f'{em(E_DIAMOND, "💎")} <b>ОЛИГАРХ ПРО СОПРОВОЖДЕНИЕ</b>\n\n'
-        f'{em(E_BOX, "📦")} выдаем: ф6 сета с мк ВК\n'
-        f'{em(E_CHECK, "✅")} если снимают, возвращаем {em(E_CHECK, "✅")}\n\n'
-        f'{em(E_DIAMOND, "💎")} <b>ГАРАНТЫ</b>\n\n'
-        f'{em(E_CHECK, "✅")} гарант вещей — 30 шт.\n'
-        f'{em(E_CHECK, "✅")} гарант билетов — 12 шт.\n'
-        f'{em(E_CHECK, "✅")} гарант выноса — 35кк.\n\n'
-        f'{em(E_PRICE, "💵")} цена {em(E_DASH, "➖")} 529{em(E_RUB, "₽")}'
+        "<b>ОЛИГАРХ ПРО СОПРОВОЖДЕНИЕ</b>\n\n"
+        "выдаем: ф6 сета с мк ВК\n"
+        "если снимают, возвращаем\n\n"
+        "ГАРАНТЫ\n\n"
+        "гарант вещей — 30 шт.\n"
+        "гарант билетов — 12 шт.\n"
+        "гарант выноса — 35кк.\n\n"
+        "цена — 529₽"
     ),
 }
 
+# Короткие описания для группы (без длинных блоков)
+SUPPORT_SHORT_DESC = {
+    "default": "ДЕФОЛТ СОПРОВОЖДЕНИЕ — гарант 10кк, карта 7-ая, вещей 5",
+    "vip": "ВИП СОПРОВОЖДЕНИЕ — гарант 15кк, карта 7-ая, вещей 7",
+    "elite": "ЭЛИТ СОПРОВОЖДЕНИЕ — 7 карта, 21кк, вещей 15",
+    "oligarch": "ОЛИГАРХ СОПРОВОЖДЕНИЕ — гарант 35кк, карта 7-ая, вещей 20",
+    "default_plus": "ДЕФОЛТ+ СОПРОВОЖДЕНИЕ — 7 карта, 10кк, вещей 7",
+    "vip_plus": "ВИП+ СОПРОВОЖДЕНИЕ — 7 карта, 15кк, вещей 12",
+    "elite_plus": "ЭЛИТ+ СОПРОВОЖДЕНИЕ — 7 карта, 21кк, вещей 15",
+    "oligarch_plus": "ОЛИГАРХ+ СОПРОВОЖДЕНИЕ — 7 карта, 35кк, вещей 20",
+    "default_pro": "ДЕФОЛТ ПРО СОПРОВОЖДЕНИЕ — гаранты 10/4/10",
+    "vip_pro": "ВИП ПРО СОПРОВОЖДЕНИЕ — гаранты 15/6/15",
+    "elite_pro": "ЭЛИТ ПРО СОПРОВОЖДЕНИЕ — гаранты 21/8/21",
+    "oligarch_pro": "ОЛИГАРХ ПРО СОПРОВОЖДЕНИЕ — гаранты 30/12/35",
+}
+
 SUPPORT_BUTTONS = [
-    ("default",       "10кк | Дефолт (7 карта) — 100₽"),
-    ("vip",           "15кк | Вип (7 карта) — 150₽"),
-    ("elite",         "21кк | Элит (7 карта) — 290₽"),
-    ("oligarch",      "35кк | Олигарх (7 карта) — 359₽"),
-    ("default_plus",  "10кк | Дефолт+ (7 карта) — 150₽"),
-    ("vip_plus",      "15кк | Вип+ (7 карта) — 210₽"),
-    ("elite_plus",    "21кк | Элит+ (7 карта) — 290₽"),
-    ("oligarch_plus", "35кк | Олигарх+ (7 карта) — 425₽"),
-    ("default_pro",   "10кк | Дефолт ПРО (7 карта) — 225₽"),
-    ("vip_pro",       "15кк | Вип ПРО (7 карта) — 289₽"),
-    ("elite_pro",     "21кк | Элит ПРО (7 карта) — 369₽"),
-    ("oligarch_pro",  "35кк | Олигарх ПРО (7 карта) — 529₽"),
+    ("default",       "10кк | Дефолт (7 карта) — 100₽",  "success", E_CHECK),
+    ("vip",           "15кк | Вип (7 карта) — 150₽",      "success", E_CHECK),
+    ("elite",         "21кк | Элит (7 карта) — 290₽",     "success", E_CHECK),
+    ("oligarch",      "35кк | Олигарх (7 карта) — 359₽",  "success", E_CHECK),
+    ("default_plus",  "10кк | Дефолт+ (7 карта) — 150₽",  "primary", E_PRICE),
+    ("vip_plus",      "15кк | Вип+ (7 карта) — 210₽",     "primary", E_PRICE),
+    ("elite_plus",    "21кк | Элит+ (7 карта) — 290₽",    "primary", E_PRICE),
+    ("oligarch_plus", "35кк | Олигарх+ (7 карта) — 425₽", "primary", E_PRICE),
+    ("default_pro",   "10кк | Дефолт ПРО (7 карта) — 225₽","danger", E_DIAMOND),
+    ("vip_pro",       "15кк | Вип ПРО (7 карта) — 289₽",   "danger", E_DIAMOND),
+    ("elite_pro",     "21кк | Элит ПРО (7 карта) — 369₽",  "danger", E_DIAMOND),
+    ("oligarch_pro",  "35кк | Олигарх ПРО (7 карта) — 529₽","danger", E_DIAMOND),
 ]
 
 BOOST_PRICES = [
@@ -434,12 +445,18 @@ def main_menu():
     ]}
 
 def support_menu():
-    kb = [[{"text": t, "callback_data": f"sup_{k}", "style": "success", "icon_custom_emoji_id": E_DIAMOND}] for k, t in SUPPORT_BUTTONS]
+    kb = []
+    for key, text, style, icon in SUPPORT_BUTTONS:
+        kb.append([{"text": text, "callback_data": f"sup_{key}", "style": style, "icon_custom_emoji_id": icon}])
     kb.append([{"text": "Назад", "callback_data": "back_main", "style": "primary", "icon_custom_emoji_id": E_CROSS}])
     return {"inline_keyboard": kb}
 
 def boost_menu():
-    kb = [[{"text": f"{a} — {p}₽", "callback_data": f"boost_{a}", "style": "success", "icon_custom_emoji_id": E_PRICE}] for a, p in BOOST_PRICES]
+    kb = []
+    styles = ["success", "primary", "danger"]
+    for i, (a, p) in enumerate(BOOST_PRICES):
+        style = styles[i % 3]
+        kb.append([{"text": f"{a} — {p}₽", "callback_data": f"boost_{a}", "style": style, "icon_custom_emoji_id": E_PRICE}])
     kb.append([{"text": "Назад", "callback_data": "back_main", "style": "primary", "icon_custom_emoji_id": E_CROSS}])
     return {"inline_keyboard": kb}
 
@@ -468,6 +485,39 @@ def group_join_menu(pid):
     return {"inline_keyboard": [
         [{"text": "Я участвую в сопровождении", "callback_data": f"join_{pid}", "style": "success", "icon_custom_emoji_id": E_USER}]
     ]}
+
+# ============================================================
+# ФУНКЦИЯ ФОРМИРОВАНИЯ ТЕКСТА ЗАКАЗА В ГРУППЕ
+# (всегда с описанием)
+# ============================================================
+
+def build_group_text(pid):
+    """Собирает полный текст заказа в группу: с описанием и участниками"""
+    o = orders.get(pid, {})
+    gm = group_messages.get(pid, {})
+    parts = gm.get("parts", [])
+    total = len(parts)
+    buyer = o.get("username", "—")
+    pubg = o.get("pubg_id", "—")
+    item = o.get("item_name", "—")
+    price = o.get("price", "—")
+    
+    # Описание (полное, с деталями)
+    desc = SUPPORT_DESCRIPTIONS.get(o.get("item_key"), "") if o.get("type") == "support" else ""
+    
+    text = (
+        f'{em(E_BOX, "📦")} <b>НОВЫЙ ЗАКАЗ В СОПРОВОЖДЕНИЕ</b>\n\n'
+        f'{em(E_USER, "👤")} Купил: @{buyer}\n'
+        f'{em(E_USER, "🆔")} PUBG ID: <code>{pubg}</code>\n\n'
+        f'{em(E_BOX, "📦")} Товар: <b>{item}</b>\n'
+        f'{em(E_PRICE, "💵")} Цена: {price}₽\n\n'
+    )
+    
+    if desc:
+        text += f'{em(E_DIAMOND, "💎")} <b>Описание:</b>\n{desc}\n\n'
+    
+    text += f'{em(E_USER, "👥")} Участвуют: {", ".join(parts)} ({total}/{MAX_PARTICIPANTS})'
+    return text
 
 # ============================================================
 # ГЛАВНОЕ МЕНЮ
@@ -511,7 +561,7 @@ def start_purchase(chat_id, itype, ikey, iname, price):
     text = (
         f'{em(E_BOX, "📦")} <b>ОПЛАТА ЗАКАЗА</b>\n\n'
         f'{em(E_USER, "👤")} Товар: <b>{iname}</b>\n'
-        f'{em(E_PRICE, "💵")} Сумма: <b>{price}{em(E_RUB, "₽")}</b>\n\n'
+        f'{em(E_PRICE, "💵")} Сумма: <b>{price}₽</b>\n\n'
         f'{em(E_DIAMOND, "💎")} <b>Реквизиты:</b>\n'
         f'{em(E_MONEY, "💳")} Карта Сбер: <code>{PAY_CARD}</code>\n'
         f'{em(E_MONEY, "📱")} Телефон Сбер: <code>{PAY_PHONE}</code>\n\n'
@@ -539,7 +589,7 @@ def process_paid(chat_id, cb_id, pid):
         f'{em(E_MONEY, "💰")} <b>ПОДТВЕРЖДЕНИЕ ОПЛАТЫ</b>\n\n'
         f'{em(E_USER, "👤")} Покупатель: @{o["username"]}\n'
         f'{em(E_BOX, "📦")} Товар: {o["item_name"]}\n'
-        f'{em(E_PRICE, "💵")} Сумма: {o["price"]}{em(E_RUB, "₽")}\n\n'
+        f'{em(E_PRICE, "💵")} Сумма: {o["price"]}₽\n\n'
         f'{em(E_INFO, "ℹ️")} Пришли ли вам деньги?'
     )
     send_safe(OWNER_ID, owner_text, owner_confirm_menu(pid))
@@ -589,23 +639,15 @@ def process_pubg_id(chat_id, pid_text):
     uname = o.get("username", "user")
     logger.info(f'🆔 {key}: PUBG {pid_text}')
     
-    desc = ""
-    if o["type"] == "support" and o["item_key"] in SUPPORT_DESCRIPTIONS:
-        desc = SUPPORT_DESCRIPTIONS[o["item_key"]]
+    # Инициализируем участников — покупатель уже первый
+    group_messages[key] = {"message_id": None, "parts": [f"@{uname}"]}
     
-    gt = (
-        f'{em(E_BOX, "📦")} <b>НОВЫЙ ЗАКАЗ В СОПРОВОЖДЕНИЕ</b>\n\n'
-        f'{em(E_USER, "👤")} Купил: @{uname}\n'
-        f'{em(E_USER, "🆔")} PUBG ID: <code>{pid_text}</code>\n\n'
-        f'{em(E_BOX, "📦")} Товар: <b>{o["item_name"]}</b>\n'
-        f'{em(E_PRICE, "💵")} Цена: {o["price"]}{em(E_RUB, "₽")}\n\n'
-        f'{em(E_DIAMOND, "💎")} <b>Описание:</b>\n{desc}\n\n'
-        f'{em(E_USER, "👥")} Участвуют в сопровождении: @{uname}'
-    )
-    r = send_safe(GROUP_ID, gt, group_join_menu(key))
+    # Собираем полный текст с описанием
+    text = build_group_text(key)
+    r = send_safe(GROUP_ID, text, group_join_menu(key))
     if r.get("ok"):
-        group_messages[key] = {"message_id": r["result"]["message_id"], "parts": [f"@{uname}"]}
-        logger.info(f'✅ {key}: в группе')
+        group_messages[key]["message_id"] = r["result"]["message_id"]
+        logger.info(f'✅ {key}: в группе ({len(group_messages[key]["parts"])}/{MAX_PARTICIPANTS})')
     
     send_safe(chat_id,
         f'{em(E_CHECK, "✅")} <b>Хорошо!</b>\n\n'
@@ -619,25 +661,21 @@ def process_join(chat_id, cb_id, pid):
         return
     gm = group_messages[pid]
     uname = f"@{get_username(chat_id)}"
+    
     if uname in gm["parts"]:
         answer_callback(cb_id, f'{em(E_TIME, "⚠️")} Уже участвуете', True)
         return
-    if len(gm["parts"]) >= 3:
-        answer_callback(cb_id, f'{em(E_CROSS, "❌")} Мест нет', True)
+    # максимум 4 человека ВСЕГО (покупатель + 3)
+    if len(gm["parts"]) >= MAX_PARTICIPANTS:
+        answer_callback(cb_id, f'{em(E_CROSS, "❌")} Мест нет (макс {MAX_PARTICIPANTS})', True)
         return
-    gm["parts"].append(uname)
-    answer_callback(cb_id, f'{em(E_CHECK, "✅")} ({len(gm["parts"])}/3)')
     
-    o = orders.get(pid, {})
-    nt = (
-        f'{em(E_BOX, "📦")} <b>НОВЫЙ ЗАКАЗ В СОПРОВОЖДЕНИЕ</b>\n\n'
-        f'{em(E_USER, "👤")} Купил: @{o.get("username", "—")}\n'
-        f'{em(E_USER, "🆔")} PUBG ID: <code>{o.get("pubg_id", "—")}</code>\n\n'
-        f'{em(E_BOX, "📦")} Товар: <b>{o.get("item_name", "—")}</b>\n'
-        f'{em(E_PRICE, "💵")} Цена: {o.get("price", "—")}{em(E_RUB, "₽")}\n\n'
-        f'{em(E_USER, "👥")} Участвуют: {", ".join(gm["parts"])} ({len(gm["parts"])}/3)'
-    )
-    markup = None if len(gm["parts"]) >= 3 else group_join_menu(pid)
+    gm["parts"].append(uname)
+    answer_callback(cb_id, f'{em(E_CHECK, "✅")} ({len(gm["parts"])}/{MAX_PARTICIPANTS})')
+    
+    # Полный текст заново (с описанием)
+    nt = build_group_text(pid)
+    markup = None if len(gm["parts"]) >= MAX_PARTICIPANTS else group_join_menu(pid)
     edit_safe(GROUP_ID, gm["message_id"], nt, markup)
 
 def owner_send_qr(file_id, caption=""):
@@ -781,7 +819,7 @@ def handle_update(u):
                 answer_callback(cb_id)
                 bt = f'{em(BTN_BOOST_PRICE, "💎")} <b>ПРАЙС ЧЕРЕЗ QR</b>\n\n'
                 for a, p in BOOST_PRICES:
-                    bt += f'{em(E_PRICE, "💵")} {a} — {p}{em(E_RUB, "₽")}\n'
+                    bt += f'{a} — {p}₽\n'
                 send_replacing(chat_id, bt, boost_menu())
                 return
             
@@ -842,7 +880,8 @@ def notify_startup(bot_username):
             f'{em(E_DIAMOND, "📊")} Режим: поллинг\n'
             f'{em(E_USER, "👥")} Группа: <code>{GROUP_ID}</code>\n'
             f'{em(E_USER, "⭐")} Канал отзывов: <code>{REVIEWS_CHANNEL}</code>\n'
-            f'{em(E_USER, "👤")} Владелец: <code>{OWNER_ID}</code>\n\n'
+            f'{em(E_USER, "👤")} Владелец: <code>{OWNER_ID}</code>\n'
+            f'{em(E_USER, "👥")} Макс участников: {MAX_PARTICIPANTS}\n\n'
             f'<b>Готов принимать заказы!</b>'
         )
         r = send_safe(OWNER_ID, text)
