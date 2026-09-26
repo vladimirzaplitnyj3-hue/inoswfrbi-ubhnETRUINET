@@ -1,7 +1,5 @@
 # ============================================================
-# KRANZAYY | METRO SHOP BOT — ФИНАЛЬНАЯ ВЕРСИЯ v16
-# QR запрашивается у АДМИНА, а не у покупателя
-# Только премиум-эмодзи
+# KRANZAYY | METRO SHOP BOT — v19 (FULL FIX)
 # ============================================================
 
 import requests
@@ -43,11 +41,10 @@ PAY_CARD = "2202208555983213"
 
 RECONNECT_MIN = 5
 RECONNECT_MAX = 300
-
-MAX_PARTICIPANTS = 4  # покупатель + 3 = 4 всего
+MAX_PARTICIPANTS = 4
 
 # ============================================================
-# ПРЕМИУМ-ЭМОДЗИ (ТОЛЬКО ОНИ)
+# ПРЕМИУМ-ЭМОДЗИ
 # ============================================================
 E_MENU      = "5231235536206730707"
 E_SHOP      = "5278702045883292456"
@@ -83,12 +80,12 @@ BTN_BOOST_PRICE = "5231102735817918643"
 user_data = {}
 orders = {}
 orders_counter = [0]
-group_messages = {}
+group_messages = {}          # pid -> {"message_id": int, "parts": [str], "joined_ids": set, "buyer_id": int}
 review_pending = {}
-awaiting_qr_from_admin = {}  # {order_id: True} — ожидаем QR от админа
+awaiting_qr_from_admin = {}
 
 # ============================================================
-# ФУНКЦИЯ ПРЕМИУМ-ЭМОДЗИ
+# ЭМОДЗИ-ХЕЛПЕРЫ
 # ============================================================
 def em(eid, fallback="⭐"):
     return f'<tg-emoji emoji-id="{eid}">{fallback}</tg-emoji>'
@@ -109,7 +106,7 @@ def check_internet():
     try:
         socket.gethostbyname("api.telegram.org")
         return True
-    except:
+    except Exception:
         return False
 
 def api_request(method, payload, timeout=30, retries=2):
@@ -187,12 +184,13 @@ def delete_message(chat_id, message_id):
     return api_request("deleteMessage", {"chat_id": chat_id, "message_id": message_id})
 
 def get_username(chat_id):
+    """Возвращает username без @, или first_name если username нет."""
     try:
         r = api_request("getChat", {"chat_id": chat_id}, retries=1)
         if r.get("ok"):
             u = r["result"]
             return u.get("username") or u.get("first_name", "Пользователь")
-    except:
+    except Exception:
         pass
     return "Пользователь"
 
@@ -205,7 +203,7 @@ def get_full_name(chat_id):
             ln = u.get("last_name", "")
             res = f"{fn} {ln}".strip()
             return res if res else "Пользователь"
-    except:
+    except Exception:
         pass
     return "Пользователь"
 
@@ -215,8 +213,7 @@ def gen_order_id():
 
 def remember_message(user_id, message_id):
     uid = str(user_id)
-    if uid not in user_data:
-        user_data[uid] = {}
+    user_data.setdefault(uid, {})
     user_data[uid]["last_msg_id"] = message_id
 
 def clear_last_message(user_id):
@@ -230,7 +227,6 @@ def clear_last_message(user_id):
 # ============================================================
 # ТЕКСТЫ
 # ============================================================
-
 MAIN_CAPTION = (
     f'{em(E_MENU, "🎁")} <b>Добро пожаловать в бота !!!</b>\n'
     f'{em(E_SHOP, "🏪")} • <b>Kranzayy | Metro Shop</b>\n\n'
@@ -257,10 +253,6 @@ LOOT_TEXT = (
     f'2-3 неделя — 1 шестая шмотка — 3₽\n\n'
     f'Если хотите купить — @Manager_Kranzayy'
 )
-
-# ============================================================
-# ОПИСАНИЯ СОПРОВОЖДЕНИЙ (ЧИСТЫЙ ТЕКСТ, БЕЗ ЭМОДЗИ)
-# ============================================================
 
 SUPPORT_DESCRIPTIONS = {
     "default": (
@@ -418,7 +410,6 @@ SUPPORT_NAMES = {
 # ============================================================
 # КЛАВИАТУРЫ
 # ============================================================
-
 def main_menu():
     return {"inline_keyboard": [
         [{"text": "СОПРОВОЖДЕНИЯ", "callback_data": "menu_support", "style": "success", "icon_custom_emoji_id": BTN_SUPPORT}],
@@ -468,22 +459,23 @@ def owner_done_menu(pid):
     ]}
 
 def owner_send_qr_menu(pid):
-    """Кнопка для админа — отправить QR"""
     return {"inline_keyboard": [
         [{"text": "Отправить QR-код", "callback_data": f"send_qr_{pid}", "style": "success", "icon_custom_emoji_id": E_INFO}],
         [{"text": "Заказ выполнен — Да", "callback_data": f"done_yes_{pid}", "style": "success", "icon_custom_emoji_id": E_CHECK}],
         [{"text": "Заказ выполнен — Нет", "callback_data": f"done_no_{pid}", "style": "danger", "icon_custom_emoji_id": E_CROSS}],
     ]}
 
-def group_join_menu(pid):
+def group_join_menu(pid, count):
+    """Кнопка исчезает, если мест нет."""
+    if count >= MAX_PARTICIPANTS:
+        return None
     return {"inline_keyboard": [
         [{"text": "Я участвую в сопровождении", "callback_data": f"join_{pid}", "style": "success", "icon_custom_emoji_id": E_USER}]
     ]}
 
 # ============================================================
-# ФОРМИРОВАНИЕ ТЕКСТА ЗАКАЗА В ГРУППЕ
+# ГРУППОВОЕ СООБЩЕНИЕ
 # ============================================================
-
 def build_group_text(pid):
     o = orders.get(pid, {})
     gm = group_messages.get(pid, {})
@@ -493,9 +485,9 @@ def build_group_text(pid):
     pubg = o.get("pubg_id", "—")
     item = o.get("item_name", "—")
     price = o.get("price", "—")
-    
+
     desc = SUPPORT_DESCRIPTIONS.get(o.get("item_key"), "") if o.get("type") == "support" else ""
-    
+
     text = (
         f'{em(E_BOX, "📦")} <b>НОВЫЙ ЗАКАЗ В СОПРОВОЖДЕНИЕ</b>\n\n'
         f'{em(E_USER, "👤")} Купил: @{buyer}\n'
@@ -503,17 +495,99 @@ def build_group_text(pid):
         f'{em(E_BOX, "📦")} Товар: <b>{item}</b>\n'
         f'{em(E_PRICE, "💵")} Цена: {price}₽\n\n'
     )
-    
     if desc:
         text += f'{em(E_DIAMOND, "💎")} <b>Описание:</b>\n{desc}\n\n'
-    
+
     text += f'{em(E_USER, "👥")} Участвуют: {", ".join(parts)} ({total}/{MAX_PARTICIPANTS})'
     return text
 
-# ============================================================
-# ГЛАВНОЕ МЕНЮ
-# ============================================================
+def init_group_order(pid):
+    """
+    Создаёт запись для группового сообщения.
+    ВАЖНО: покупатель добавляется динамически из заказа, а НЕ хардкодом.
+    """
+    o = orders.get(pid)
+    if not o:
+        return
+    buyer_username = o.get("username") or get_username(o["user_id"])
+    group_messages[pid] = {
+        "message_id": None,
+        "parts": [f"@{buyer_username}"],
+        "joined_ids": {o["user_id"]},   # покупатель уже внутри
+        "buyer_id": o["user_id"],
+    }
+    logger.info(f"👥 {pid}: init, parts = {group_messages[pid]['parts']}")
 
+def send_order_to_group(pid):
+    gm = group_messages.get(pid)
+    if not gm:
+        return
+    text = build_group_text(pid)
+    kb = group_join_menu(pid, len(gm["parts"]))
+    r = send_safe(GROUP_ID, text, kb)
+    if r.get("ok"):
+        gm["message_id"] = r["result"]["message_id"]
+        logger.info(f"📤 {pid}: отправлено в группу msg_id={gm['message_id']}")
+    else:
+        logger.error(f"❌ Не удалось отправить заказ в группу: {r}")
+
+# ============================================================
+# 🔴 ГЛАВНОЕ ИСПРАВЛЕНИЕ: обработчик кнопки «Я участвую»
+# ============================================================
+def process_join_callback(cb, pid):
+    """
+    cb — весь callback_query.
+    username берём ИЗ cb["from"] — это тот, кто нажал кнопку.
+    """
+    user = cb.get("from", {}) or {}
+    user_id = user.get("id")
+
+    if user.get("username"):
+        display = f"@{user['username']}"
+    else:
+        display = user.get("first_name", "Участник")
+
+    gm = group_messages.get(pid)
+    o = orders.get(pid)
+
+    if not gm or not o:
+        answer_callback(cb["id"], "❌ Заказ не найден", True)
+        return
+
+    joined_ids = gm.setdefault("joined_ids", set())
+
+    # защита от повторов по ID
+    if user_id in joined_ids:
+        answer_callback(cb["id"], "⚠️ Ты уже участвуешь", True)
+        return
+
+    # защита от повторов по нику
+    if display in gm["parts"]:
+        answer_callback(cb["id"], "⚠️ Ты уже участвуешь", True)
+        return
+
+    if len(gm["parts"]) >= MAX_PARTICIPANTS:
+        answer_callback(cb["id"], "❌ Мест больше нет", True)
+        if gm.get("message_id"):
+            edit_safe(GROUP_ID, gm["message_id"], build_group_text(pid), None)
+        return
+
+    gm["parts"].append(display)
+    joined_ids.add(user_id)
+    gm["joined_ids"] = joined_ids
+
+    logger.info(f"➕ {pid}: {display} (id={user_id}) в списке. Всего: {len(gm['parts'])}")
+
+    new_text = build_group_text(pid)
+    kb = group_join_menu(pid, len(gm["parts"]))
+    if gm.get("message_id"):
+        edit_safe(GROUP_ID, gm["message_id"], new_text, kb)
+
+    answer_callback(cb["id"], f"✅ Ты в списке ({len(gm['parts'])}/{MAX_PARTICIPANTS})")
+
+# ============================================================
+# МЕНЮ
+# ============================================================
 def send_main_menu(chat_id):
     global PHOTO_FILE_ID
     clear_last_message(chat_id)
@@ -524,7 +598,8 @@ def send_main_menu(chat_id):
             try:
                 PHOTO_FILE_ID = r["result"]["photo"][-1]["file_id"]
                 logger.info(f'💾 PHOTO_FILE_ID = "{PHOTO_FILE_ID}"')
-            except: pass
+            except Exception:
+                pass
         remember_message(chat_id, r["result"]["message_id"])
     else:
         r2 = send_safe(chat_id, MAIN_CAPTION, main_menu())
@@ -540,14 +615,19 @@ def send_replacing(chat_id, text, reply_markup=None):
     return r
 
 # ============================================================
-# ЛОГИКА ПОКУПКИ
+# ПОКУПКА
 # ============================================================
-
 def start_purchase(chat_id, itype, ikey, iname, price):
     clear_last_message(chat_id)
     pid = gen_order_id()
-    orders[pid] = {"user_id": chat_id, "type": itype, "item_key": ikey,
-                   "item_name": iname, "price": price, "status": "awaiting_payment"}
+    orders[pid] = {
+        "user_id": chat_id,
+        "type": itype,
+        "item_key": ikey,
+        "item_name": iname,
+        "price": price,
+        "status": "awaiting_payment",
+    }
     logger.info(f"🛒 {pid}: {iname} — {price}₽")
     text = (
         f'{em(E_BOX, "📦")} <b>ОПЛАТА ЗАКАЗА</b>\n\n'
@@ -566,16 +646,15 @@ def start_purchase(chat_id, itype, ikey, iname, price):
 def process_paid(chat_id, cb_id, pid):
     o = orders.get(pid)
     if not o:
-        answer_callback(cb_id, f'{em(E_CROSS, "❌")} Заказ не найден', True)
+        answer_callback(cb_id, "❌ Заказ не найден", True)
         return
     if o["status"] != "awaiting_payment":
-        answer_callback(cb_id, f'{em(E_TIME, "⏳")} Уже обработан', True)
+        answer_callback(cb_id, "⏳ Уже обработан", True)
         return
-    
+
     o["status"] = "awaiting_owner_confirm"
     o["username"] = get_username(chat_id)
-    logger.info(f'💰 {pid}: {chat_id} нажал Я оплатил')
-    
+
     owner_text = (
         f'{em(E_MONEY, "💰")} <b>ПОДТВЕРЖДЕНИЕ ОПЛАТЫ</b>\n\n'
         f'{em(E_USER, "👤")} Покупатель: @{o["username"]}\n'
@@ -584,26 +663,24 @@ def process_paid(chat_id, cb_id, pid):
         f'{em(E_INFO, "ℹ️")} Пришли ли вам деньги?'
     )
     send_safe(OWNER_ID, owner_text, owner_confirm_menu(pid))
-    answer_callback(cb_id, f'{em(E_CHECK, "✅")} Отправлено админу')
+    answer_callback(cb_id, "✅ Отправлено админу")
     send_replacing(chat_id, f'{em(E_TIME, "⏳")} Ожидайте подтверждения...')
 
 def owner_confirm(cb_id, pid, yes):
-    """Админ подтвердил оплату"""
     o = orders.get(pid)
     if not o:
-        answer_callback(cb_id, f'{em(E_CROSS, "❌")} Не найден', True)
+        answer_callback(cb_id, "❌ Не найден", True)
         return
+
     if yes:
         o["status"] = "awaiting_info"
         logger.info(f'✅ {pid}: админ подтвердил')
-        
+
         if o["type"] == "boost":
-            # БУСТ: покупателю — ожидайте QR, а админу — запрос прислать QR
             send_safe(o["user_id"],
                 f'{em(E_CHECK, "✅")} <b>Оплата подтверждена!</b>\n\n'
-                f'{em(E_INFO, "ℹ️")} Ожидайте QR-код от админа. Зайдите в игру и вставьте его.\n\n'
+                f'{em(E_INFO, "ℹ️")} Ожидайте QR-код от админа.\n\n'
                 f'{em(E_TIME, "⏳")} Максимум 20 минут.')
-            # Запрос админу прислать QR
             awaiting_qr_from_admin[pid] = True
             send_safe(OWNER_ID,
                 f'{em(E_INFO, "ℹ️")} <b>Отправьте QR-код</b> для заказа {pid}\n\n'
@@ -611,81 +688,49 @@ def owner_confirm(cb_id, pid, yes):
                 f'{em(E_BOX, "📦")} {o["item_name"]}',
                 owner_send_qr_menu(pid))
         else:
-            # СОПРОВОЖДЕНИЕ: покупателю — введите PUBG ID
             send_safe(o["user_id"],
                 f'{em(E_CHECK, "✅")} <b>Заказ оплачен!</b>\n\n'
                 f'{em(E_USER, "🆔")} Введите ваш PUBG ID (только цифры, до 25):')
-        
-        answer_callback(cb_id, f'{em(E_CHECK, "✅")} Подтверждено')
+
+        answer_callback(cb_id, "✅ Подтверждено")
     else:
         o["status"] = "rejected"
-        logger.info(f'❌ {pid}: админ отменил')
         send_safe(o["user_id"], f'{em(E_CROSS, "❌")} Заказ отменён.')
-        answer_callback(cb_id, f'{em(E_CROSS, "❌")} Отменено')
+        answer_callback(cb_id, "❌ Отменено")
 
 def process_pubg_id(chat_id, pid_text):
-    """Покупатель ввёл PUBG ID (для сопровождений)"""
+    """Покупатель ввёл PUBG ID — публикуем заказ в группе."""
     uid = str(chat_id)
-    o = None
-    key = None
+    found_key = None
     for k, v in orders.items():
         if str(v.get("user_id")) == uid and v.get("status") == "awaiting_info":
-            o = v
-            key = k
+            found_key = k
             break
-    if not o:
+    if not found_key:
         return False
-    
+
+    o = orders[found_key]
     o["pubg_id"] = pid_text
     o["status"] = "in_group"
-    uname = o.get("username", "user")
-    logger.info(f'🆔 {key}: PUBG {pid_text}')
-    
-    group_messages[key] = {"message_id": None, "parts": [f"@{uname}"]}
-    text = build_group_text(key)
-    r = send_safe(GROUP_ID, text, group_join_menu(key))
-    if r.get("ok"):
-        group_messages[key]["message_id"] = r["result"]["message_id"]
-        logger.info(f'✅ {key}: в группе ({len(group_messages[key]["parts"])}/{MAX_PARTICIPANTS})')
-    
+
+    # инициализируем групповую запись — покупатель добавляется динамически
+    init_group_order(found_key)
+    send_order_to_group(found_key)
+
     send_safe(chat_id,
         f'{em(E_CHECK, "✅")} <b>Хорошо!</b>\n\n'
-        f'{em(E_INFO, "ℹ️")} Ждите в игре максимум 20 минут.'
-    )
+        f'{em(E_INFO, "ℹ️")} Ждите в игре максимум 20 минут.')
     return True
 
-def process_join(chat_id, cb_id, pid):
-    if pid not in group_messages:
-        answer_callback(cb_id, f'{em(E_CROSS, "❌")} Не найден', True)
-        return
-    gm = group_messages[pid]
-    uname = f"@{get_username(chat_id)}"
-    
-    if uname in gm["parts"]:
-        answer_callback(cb_id, f'{em(E_TIME, "⚠️")} Уже участвуете', True)
-        return
-    if len(gm["parts"]) >= MAX_PARTICIPANTS:
-        answer_callback(cb_id, f'{em(E_CROSS, "❌")} Мест нет (макс {MAX_PARTICIPANTS})', True)
-        return
-    
-    gm["parts"].append(uname)
-    answer_callback(cb_id, f'{em(E_CHECK, "✅")} ({len(gm["parts"])}/{MAX_PARTICIPANTS})')
-    
-    nt = build_group_text(pid)
-    markup = None if len(gm["parts"]) >= MAX_PARTICIPANTS else group_join_menu(pid)
-    edit_safe(GROUP_ID, gm["message_id"], nt, markup)
-
 # ============================================================
-# ОТПРАВКА QR АДМИНОМ
+# QR ОТ АДМИНА
 # ============================================================
-
 def admin_send_qr_to_buyer(pid, file_id, caption=""):
-    """Админ прислал QR — пересылаем покупателю"""
     o = orders.get(pid)
     if not o:
         send_safe(OWNER_ID, f'{em(E_CROSS, "❌")} Заказ не найден')
         return False
-    
+
     send_photo_safe(o["user_id"], file_id,
         caption=(
             f'{em(E_INFO, "ℹ️")} <b>Ваш QR-код!</b>\n\n'
@@ -694,29 +739,24 @@ def admin_send_qr_to_buyer(pid, file_id, caption=""):
         ))
     o["status"] = "awaiting_done"
     awaiting_qr_from_admin.pop(pid, None)
-    logger.info(f'✅ QR отправлен покупателю {o["user_id"]}')
     send_safe(OWNER_ID, f'{em(E_CHECK, "✅")} QR отправлен покупателю', owner_done_menu(pid))
     return True
 
 def process_owner_photo(chat_id, file_id, caption=""):
-    """Админ прислал фото — отправляем тому, кто ждёт"""
     if not awaiting_qr_from_admin:
         send_safe(OWNER_ID, f'{em(E_CROSS, "⚠️")} Нет активных заказов для QR')
         return
-    
-    # Отправляем первому ожидающему (или всем — по заказу)
     for pid in list(awaiting_qr_from_admin.keys()):
         admin_send_qr_to_buyer(pid, file_id, caption)
         break
 
 # ============================================================
-# ОТЗЫВЫ
+# ЗАВЕРШЕНИЕ + ОТЗЫВЫ
 # ============================================================
-
 def owner_done(cb_id, pid, yes):
     o = orders.get(pid)
     if not o:
-        answer_callback(cb_id, f'{em(E_CROSS, "❌")} Не найден', True)
+        answer_callback(cb_id, "❌ Не найден", True)
         return
     if yes:
         o["status"] = "completed"
@@ -726,7 +766,7 @@ def owner_done(cb_id, pid, yes):
             f'{em(E_HEART, "❤️‍🔥")} Напишите пожалуйста отзыв — просто отправьте сообщение с отзывом.'
         )
         review_pending[str(buyer_id)] = True
-        answer_callback(cb_id, f'{em(E_CHECK, "✅")} Закрыт')
+        answer_callback(cb_id, "✅ Закрыт")
         send_safe(OWNER_ID, f'{em(E_CHECK, "✅")} Заказ {pid} закрыт')
     else:
         o["status"] = "awaiting_qr"
@@ -735,36 +775,33 @@ def owner_done(cb_id, pid, yes):
         send_safe(OWNER_ID,
             f'{em(E_INFO, "ℹ️")} Отправьте новый QR для заказа {pid}',
             owner_send_qr_menu(pid))
-        answer_callback(cb_id, f'{em(E_TIME, "⚠️")} Ждём QR')
+        answer_callback(cb_id, "⚠️ Ждём QR")
 
 def process_review(chat_id, text):
     uid = str(chat_id)
     if uid not in review_pending:
         return False
-    
+
     del review_pending[uid]
     uname = get_username(chat_id)
     full_name = get_full_name(chat_id)
-    
+
     review_text = (
         f'{em(E_USER, "👤")} <b>Отзыв от</b> @{uname} ({full_name})\n\n'
         f'{em(E_HEART, "❤️‍🔥")} <b>Отзыв:</b>\n{text}\n\n'
         f'{em(E_DIAMOND, "💎")} <i>Kranzayy | Metro Shop</i>'
     )
-    
+
     r = send_safe(REVIEWS_CHANNEL, review_text)
     if r.get("ok"):
-        logger.info(f'✅ Отзыв от {uname} отправлен')
         send_safe(chat_id, f'{em(E_CHECK, "✅")} Спасибо за отзыв!')
     else:
-        logger.error(f'❌ Не удалось: {r}')
         send_safe(chat_id, f'{em(E_CROSS, "❌")} Ошибка отправки.')
     return True
 
 # ============================================================
-# ОБРАБОТКА
+# ОБРАБОТКА UPDATE
 # ============================================================
-
 def handle_update(u):
     try:
         if "message" in u:
@@ -772,15 +809,13 @@ def handle_update(u):
             chat_id = m["chat"]["id"]
             text = m.get("text", "")
             photo = m.get("photo")
-            
-            # Фото от АДМИНА → отправляем покупателю (QR)
+
+            # фото от админа → QR покупателю
             if photo and chat_id == OWNER_ID:
                 file_id = photo[-1]["file_id"]
-                # Проверяем, ждём ли мы QR от админа
                 if awaiting_qr_from_admin:
                     process_owner_photo(chat_id, file_id, m.get("caption", ""))
                 else:
-                    # Если никто не ждёт — отправляем всем in_group
                     cnt = 0
                     for pid, o in list(orders.items()):
                         if o.get("status") in ("in_group", "awaiting_info"):
@@ -789,40 +824,39 @@ def handle_update(u):
                     if cnt == 0:
                         send_safe(OWNER_ID, f'{em(E_CROSS, "⚠️")} Нет заказов для QR')
                 return
-            
+
             if text == "/start":
-                logger.info(f'🖱 /start от {chat_id}')
                 send_main_menu(chat_id)
                 return
-            
+
             uid = str(chat_id)
             if uid in review_pending and text and not text.startswith("/"):
                 process_review(chat_id, text)
                 return
-            
+
             if text and text.isdigit() and len(text) <= 25:
                 if process_pubg_id(chat_id, text):
                     return
-        
+
         elif "callback_query" in u:
             cb = u["callback_query"]
             chat_id = cb["message"]["chat"]["id"]
             data = cb["data"]
             cb_id = cb["id"]
             logger.info(f'🖱 {data} от {chat_id}')
-            
+
             if data == "back_main":
                 answer_callback(cb_id)
                 send_main_menu(chat_id)
                 return
-            
+
             if data == "menu_support":
                 answer_callback(cb_id)
                 send_replacing(chat_id,
                     f'{em(E_DIAMOND, "💎")} <b>Выберите подходящее сопровождение:</b>',
                     support_menu())
                 return
-            
+
             if data.startswith("sup_"):
                 key = data.replace("sup_", "")
                 if key in SUPPORT_DESCRIPTIONS:
@@ -833,24 +867,24 @@ def handle_update(u):
                     ]}
                     send_replacing(chat_id, SUPPORT_DESCRIPTIONS[key], kb)
                 return
-            
+
             if data.startswith("buysup_"):
                 key = data.replace("buysup_", "")
                 if key in SUPPORT_PRICES:
                     answer_callback(cb_id)
                     start_purchase(chat_id, "support", key, SUPPORT_NAMES[key], SUPPORT_PRICES[key])
                 return
-            
+
             if data == "menu_kits":
                 answer_callback(cb_id)
                 send_replacing(chat_id, KITS_TEXT, back_button())
                 return
-            
+
             if data == "menu_loot":
                 answer_callback(cb_id)
                 send_replacing(chat_id, LOOT_TEXT, back_button())
                 return
-            
+
             if data == "menu_boost":
                 answer_callback(cb_id)
                 bt = f'{em(BTN_BOOST_PRICE, "💎")} <b>ПРАЙС ЧЕРЕЗ QR</b>\n\n'
@@ -858,7 +892,7 @@ def handle_update(u):
                     bt += f'{a} — {p}₽\n'
                 send_replacing(chat_id, bt, boost_menu())
                 return
-            
+
             if data.startswith("boost_"):
                 a = data.replace("boost_", "")
                 for amt, pr in BOOST_PRICES:
@@ -867,29 +901,28 @@ def handle_update(u):
                         start_purchase(chat_id, "boost", a, f"БУСТ {a}", pr)
                         return
                 return
-            
-            # Кнопка "Отправить QR-код" от админа
+
             if data.startswith("send_qr_"):
                 pid = data.replace("send_qr_", "")
                 awaiting_qr_from_admin[pid] = True
-                answer_callback(cb_id, f'{em(E_INFO, "ℹ️")} Отправьте фото QR в этот чат')
+                answer_callback(cb_id, "ℹ️ Отправьте фото QR в этот чат")
                 send_safe(OWNER_ID,
                     f'{em(E_INFO, "ℹ️")} Пришлите фото QR-кода для заказа {pid}\n'
                     f'Просто отправьте фото в этот чат.')
                 return
-            
+
             if data.startswith("paid_"):
                 process_paid(chat_id, cb_id, data.replace("paid_", ""))
                 return
-            
+
             if data.startswith("cancel_"):
                 pid = data.replace("cancel_", "")
                 if pid in orders:
                     orders[pid]["status"] = "cancelled"
-                answer_callback(cb_id, f'{em(E_CROSS, "❌")} Отменено')
+                answer_callback(cb_id, "❌ Отменено")
                 send_replacing(chat_id, f'{em(E_CROSS, "❌")} Отменено', main_menu())
                 return
-            
+
             if data.startswith("owner_yes_"):
                 owner_confirm(cb_id, data.replace("owner_yes_", ""), True)
                 return
@@ -902,85 +935,65 @@ def handle_update(u):
             if data.startswith("done_no_"):
                 owner_done(cb_id, data.replace("done_no_", ""), False)
                 return
+
+            # 🔴 ГЛАВНОЕ: кнопка «Я участвую»
             if data.startswith("join_"):
-                process_join(chat_id, cb_id, data.replace("join_", ""))
+                process_join_callback(cb, data.replace("join_", ""))
                 return
-            
-            answer_callback(cb_id, f'{em(E_INFO, "❓")}')
-    
+
+            answer_callback(cb_id, "❓")
+
     except Exception as e:
         logger.error(f'💥 handle_update: {e}')
         logger.error(traceback.format_exc())
 
 # ============================================================
-# УВЕДОМЛЕНИЕ
+# СТАРТ
 # ============================================================
-
 def notify_startup(bot_username):
-    try:
-        now = datetime.datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-        text = (
-            f'{em(E_CHECK, "✅")} <b>БОТ УСПЕШНО ЗАПУЩЕН!</b>\n\n'
-            f'{em(E_USER, "🤖")} Бот: @{bot_username}\n'
-            f'{em(E_TIME, "🕐")} Время: {now}\n'
-            f'{em(E_DIAMOND, "📊")} Режим: поллинг\n'
-            f'{em(E_USER, "👥")} Группа: <code>{GROUP_ID}</code>\n'
-            f'{em(E_USER, "⭐")} Канал отзывов: <code>{REVIEWS_CHANNEL}</code>\n'
-            f'{em(E_USER, "👤")} Владелец: <code>{OWNER_ID}</code>\n\n'
-            f'<b>Готов принимать заказы!</b>'
-        )
-        r = send_safe(OWNER_ID, text)
-        if r.get("ok"):
-            logger.info("✅ Уведомление о запуске отправлено")
-            return True
-        return False
-    except Exception as e:
-        logger.error(f'💥 notify_startup: {e}')
-        return False
-
-# ============================================================
-# ЗАПУСК
-# ============================================================
+    now = datetime.datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+    text = (
+        f'{em(E_CHECK, "✅")} <b>БОТ УСПЕШНО ЗАПУЩЕН!</b>\n\n'
+        f'{em(E_USER, "🤖")} Бот: @{bot_username}\n'
+        f'{em(E_TIME, "🕐")} Время: {now}\n'
+        f'{em(E_DIAMOND, "📊")} Режим: поллинг\n'
+        f'{em(E_USER, "👥")} Группа: <code>{GROUP_ID}</code>\n'
+        f'{em(E_USER, "⭐")} Канал отзывов: <code>{REVIEWS_CHANNEL}</code>\n'
+        f'{em(E_USER, "👤")} Владелец: <code>{OWNER_ID}</code>\n\n'
+        f'<b>Готов принимать заказы!</b>'
+    )
+    return send_safe(OWNER_ID, text)
 
 def main():
     logger.info("=" * 60)
-    logger.info("🚀 KRANZAYY BOT — ЗАПУСК")
+    logger.info("🚀 KRANZAYY BOT — ЗАПУСК v19")
     logger.info("=" * 60)
-    
+
     if not check_internet():
-        logger.warning("⚠️ Нет доступа к api.telegram.org — ждём...")
+        logger.warning("⚠️ Нет интернета — ждём...")
         while not check_internet():
             time.sleep(10)
-            logger.info("🔄 Проверка...")
-    logger.info("✅ Интернет доступен")
-    
+
     me = api_request("getMe", {})
     if not me.get("ok"):
         logger.error(f'❌ Бот не отвечает: {me}')
         return
     bot_username = me["result"].get("username", "unknown")
-    logger.info(f'✅ Бот найден: @{bot_username}')
-    
+    logger.info(f'✅ Бот: @{bot_username}')
+
     api_request("deleteWebhook", {"drop_pending_updates": True})
     notify_startup(bot_username)
-    
+
     offset = None
     reconnect_delay = RECONNECT_MIN
-    consecutive_errors = 0
-    
-    logger.info("=" * 60)
-    logger.info("🚀 ПОЛЛИНГ ЗАПУЩЕН")
-    logger.info("=" * 60)
-    
+
     while True:
         try:
             r = requests.get(f"{BASE_URL}/getUpdates",
-                           params={"timeout": 30, "offset": offset},
-                           timeout=35).json()
+                             params={"timeout": 30, "offset": offset,
+                                     "allowed_updates": json.dumps(["message", "callback_query"])},
+                             timeout=35).json()
             if r.get("ok"):
-                if consecutive_errors > 0:
-                    logger.info("✅ Соединение восстановлено")
-                consecutive_errors = 0
                 reconnect_delay = RECONNECT_MIN
                 for upd in r.get("result", []):
                     handle_update(upd)
@@ -989,20 +1002,16 @@ def main():
                 logger.error(f'❌ getUpdates: {r}')
             time.sleep(0.3)
         except requests.exceptions.Timeout:
-            consecutive_errors += 1
             time.sleep(2)
         except requests.exceptions.ConnectionError:
-            consecutive_errors += 1
             wait = min(reconnect_delay, RECONNECT_MAX)
             logger.info(f'⏳ Переподключение через {wait} сек...')
             time.sleep(wait)
             reconnect_delay = min(reconnect_delay * 2, RECONNECT_MAX)
-            continue
         except KeyboardInterrupt:
             logger.info("⏹ Остановлен")
             break
         except Exception as e:
-            consecutive_errors += 1
             logger.error(f'💥 main: {e}')
             time.sleep(5)
 
